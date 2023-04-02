@@ -39,7 +39,7 @@ namespace ShopifySyncEngine
                 await connection.OpenAsync();
 
                 string sql = @"
-                SELECT Erp_Inventory.InventoryCode as InventoryCode, Erp_Inventory.InventoryName as InventoryName, Erp_InventoryTotal.ActualStock as ActualStock, Erp_InventoryPriceList.Price as Price,Erp_InventoryAttachment.Attachment as Attachment,Erp_Mark.MarkName as MarkName,Erp_InventoryGroup.GroupName as GroupName,Erp_Category.CategoryName2 as CategoryName2
+                SELECT Erp_Inventory.InventoryCode as InventoryCode, Erp_Inventory.InventoryName as InventoryName, Erp_InventoryTotal.ActualStock as ActualStock, Erp_InventoryPriceList.Price as Price,Erp_InventoryAttachment.Attachment as Attachment,Erp_Mark.MarkName as MarkName,Erp_InventoryGroup.GroupName as GroupName,Erp_Category.CategoryName2 as CategoryName2 ,Erp_InventoryAttachment.Explanation as Explanation
                 FROM Erp_Inventory 
                 JOIN Erp_InventoryTotal ON Erp_Inventory.RecId = Erp_InventoryTotal.InventoryID 
 				Join Erp_Category On Erp_Inventory.CategoryId=Erp_Category.RecId
@@ -47,7 +47,7 @@ namespace ShopifySyncEngine
                 JOIN Erp_InventoryAttachment ON Erp_Inventory.RecId = Erp_InventoryAttachment.InventoryID AND Erp_InventoryAttachment.Type = 1 
 				Join Erp_Mark on Erp_Inventory.MarkId= Erp_Mark.RecId
 				join Erp_InventoryGroup on Erp_Inventory.GroupId=Erp_InventoryGroup.RecId
-                WHERE Erp_InventoryTotal.TotalDate IS NULL AND Erp_InventoryTotal.ActualStock >= 0 AND Erp_InventoryPriceList.PriceType = 2 AND Erp_InventoryTotal.WarehouseId = 12 ORDER BY Erp_Inventory.RecId;";
+                WHERE Erp_InventoryAttachment.Explanation is not null and Erp_InventoryTotal.TotalDate IS NULL AND Erp_InventoryTotal.ActualStock >= 0 AND Erp_InventoryPriceList.PriceType = 2 AND Erp_InventoryTotal.WarehouseId = 12 ORDER BY Erp_Inventory.RecId;";
 
                 SqlDataAdapter adapter = new SqlDataAdapter(sql, connection);
                 DataTable dt = new DataTable();

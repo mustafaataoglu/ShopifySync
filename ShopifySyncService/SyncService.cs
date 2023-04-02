@@ -25,7 +25,7 @@ namespace ShopifySyncService
 
         private void StartSync()
         {
-            if (DateTime.Now.Hour == 19 && DateTime.Now.Minute == 00 )
+            if (DateTime.Now.Hour == 17 && DateTime.Now.Minute == 00 )
             {
                 SyncEngine.Start();
             }
