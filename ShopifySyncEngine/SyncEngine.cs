@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ShopifySharp;
 using ShopifySharp.Filters;
+using System.Runtime.Remoting.Contexts;
 
 namespace ShopifySyncEngine
 {
@@ -15,11 +16,12 @@ namespace ShopifySyncEngine
     {
         public static async void Start()
         {
-            const string _shopName = "https://authentic-1256.myshopify.com";
-            const string _apiKey = "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";
-            const string _password = "2270bb01343dc309d8674a2fedb2d85b";
+            const string _shopName = "https://authentic-1612.myshopify.com/";
+            const string _apiKey = "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";
+            const string _password = "957fb6957ff9c2aaa6f350c36b493847";
             var products = new List<Product>();
             var service = new ProductService(_shopName, _apiKey);
+            var vservice = new InventoryLevelService(_shopName, _apiKey);
             long? lastId = 0;
             // string connectionString = "Data Source=DESKTOP-1IHL5NT;Initial Catalog=SentezLive;Integrated Security=True;Timeout=180;";
             string connectionString = "Data Source=DESKTOP-1IHL5NT;Initial Catalog=SentezLive;User Id=syncuser;Password=!Sentez1234;Timeout=180;";
@@ -37,13 +39,15 @@ namespace ShopifySyncEngine
                 await connection.OpenAsync();
 
                 string sql = @"
-                SELECT Erp_Inventory.InventoryCode as InventoryCode, Erp_Inventory.InventoryName as InventoryName, Erp_InventoryTotal.ActualStock as ActualStock, Erp_InventoryPriceList.Price as Price,Erp_InventoryAttachment.Attachment as Attachment,Erp_Mark.MarkName as MarkName
+                SELECT Erp_Inventory.InventoryCode as InventoryCode, Erp_Inventory.InventoryName as InventoryName, Erp_InventoryTotal.ActualStock as ActualStock, Erp_InventoryPriceList.Price as Price,Erp_InventoryAttachment.Attachment as Attachment,Erp_Mark.MarkName as MarkName,Erp_InventoryGroup.GroupName as GroupName,Erp_Category.CategoryName2 as CategoryName2
                 FROM Erp_Inventory 
                 JOIN Erp_InventoryTotal ON Erp_Inventory.RecId = Erp_InventoryTotal.InventoryID 
+				Join Erp_Category On Erp_Inventory.CategoryId=Erp_Category.RecId
                 JOIN Erp_InventoryPriceList ON Erp_Inventory.RecId = Erp_InventoryPriceList.InventoryID 
                 JOIN Erp_InventoryAttachment ON Erp_Inventory.RecId = Erp_InventoryAttachment.InventoryID AND Erp_InventoryAttachment.Type = 1 
 				Join Erp_Mark on Erp_Inventory.MarkId= Erp_Mark.RecId
-                WHERE Erp_InventoryTotal.TotalDate IS NULL AND Erp_InventoryTotal.ActualStock >= 1 AND Erp_InventoryPriceList.PriceType = 2 AND Erp_InventoryTotal.WarehouseId = 12 ORDER BY Erp_Inventory.RecId;";
+				join Erp_InventoryGroup on Erp_Inventory.GroupId=Erp_InventoryGroup.RecId
+                WHERE Erp_InventoryTotal.TotalDate IS NULL AND Erp_InventoryTotal.ActualStock >= 0 AND Erp_InventoryPriceList.PriceType = 2 AND Erp_InventoryTotal.WarehouseId = 12 ORDER BY Erp_Inventory.RecId;";
 
                 SqlDataAdapter adapter = new SqlDataAdapter(sql, connection);
                 DataTable dt = new DataTable();
@@ -87,11 +91,22 @@ namespace ShopifySyncEngine
                             try
                             {
                                 var product = products.Single(q => q.Id == shopifyProduct.ProductId);
-
-                                product.Variants.First().Price = sentezProduct.Field<decimal?>("Price");
-                                product.Variants.First().InventoryQuantity = (long)sentezProduct.Field<decimal?>("ActualStock");
+                                product.Title = sentezProduct.Field<string>("MarkName") + " " + sentezProduct.Field<string>("InventoryName") + " " + sentezProduct.Field<string>("CategoryName2");
+                                product.Variants.First().Price = sentezProduct.Field<decimal?>("Price") * 0.75m;
+                                product.Variants.First().InventoryQuantity = Convert.ToInt64(sentezProduct.Field<decimal?>("ActualStock"));
+                                product.Options.First().Name = "Brand";
                                 product.Variants.First().Option1 = sentezProduct.Field<string>("MarkName");
+                                product.Tags = sentezProduct.Field<string>("GroupName") + "," + sentezProduct.Field<string>("InventoryName") + "," + sentezProduct.Field<string>("CategoryName2");
                                 await service.UpdateAsync(product.Id.Value, product);
+                                var inventoryLevel = new InventoryLevel
+                                {
+                                    LocationId = 81005871445,
+                                    InventoryItemId = product.Variants.First().InventoryItemId,
+                                    Available = Convert.ToInt64(sentezProduct.Field<decimal?>("ActualStock"))
+                                };
+                                await vservice.SetAsync(inventoryLevel);
+
+
                                 log($"SKU : {shopifyProduct.SKU} güncellendi. {shopifyProduct.Price:c2} / {shopifyProduct.InventoryQuantity:n0}");
 
                                 await Task.Delay(1000);
@@ -103,23 +118,25 @@ namespace ShopifySyncEngine
                             }
 
                         }
-                        else
+                        else if ((long)sentezProduct.Field<decimal?>("ActualStock") >= 1)
                         {
                             try
                             {
-                                //var imageSQL = $"select Attachment from Erp_InventoryAttachment where InventoryId = {sentezProduct.Field<long>("RecId")}";
-                                //var imageSqlCommand = new SqlCommand(imageSQL, connection);
+
 
                                 var product = new Product
                                 {
-                                    Title = sentezProduct.Field<string>("InventoryName"),
+                                    Title = sentezProduct.Field<string>("MarkName") + " " + sentezProduct.Field<string>("InventoryName") + " " + sentezProduct.Field<string>("CategoryName2"),
                                     Vendor = "Sentez",
                                     ProductType = "Sentez",
-                                    Options = new List<ProductOption>
+                                    Tags = sentezProduct.Field<string>("GroupName") + "," + sentezProduct.Field<string>("InventoryName") + "," + sentezProduct.Field<string>("CategoryName2"),
+                                    
+                                Options = new List<ProductOption>
                                 {
                                     new ProductOption
                                     {
-                                        Name = "Marka"
+                                        Name = "Brand"
+
                                     }
                                 },
 
@@ -138,11 +155,11 @@ namespace ShopifySyncEngine
                                                                     {
                                                                         new ProductVariant
                                                                         {
-                                                                            Title = sentezProduct.Field<string>("InventoryName"),
+                                                                            
                                                                             FulfillmentService = "manual",
                                                                             InventoryManagement = "shopify",
                                                                             Option1 = sentezProduct.Field<string>("MarkName"),
-                                                                            Price = sentezProduct.Field<decimal?>("Price"),
+                                                                            Price = sentezProduct.Field<decimal?>("Price") * 0.75m,
                                                                             SKU = sentezProduct.Field<string>("InventoryCode"),
                                                                             InventoryQuantity = (long)sentezProduct.Field<decimal?>("ActualStock")
                                                                         }
