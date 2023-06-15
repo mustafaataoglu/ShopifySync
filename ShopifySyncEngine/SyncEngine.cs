@@ -16,6 +16,11 @@ namespace ShopifySyncEngine
     {
         public static async void Start()
         {
+            AppContext.SetSwitch("Switch.System.Globalization.NoAsyncCurrentCulture", true);
+            AppContext.SetSwitch("Switch.System.Security.Cryptography.AppContext.AllowKnownWeakCryptographicAlgorithms", true);
+            AppContext.SetSwitch("Switch.System.Security.Cryptography.AppContext.AllowObsoleteCiphers", true);
+            AppContext.SetSwitch("Switch.System.Net.DontEnableSystemDefaultTlsVersions", true);
+
             const string _shopName = "https://authentic-1612.myshopify.com/";
             const string _apiKey = "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";
             const string _password = "957fb6957ff9c2aaa6f350c36b493847";
@@ -23,8 +28,8 @@ namespace ShopifySyncEngine
             var service = new ProductService(_shopName, _apiKey);
             var vservice = new InventoryLevelService(_shopName, _apiKey);
             long? lastId = 0;
-            // string connectionString = "Data Source=DESKTOP-1IHL5NT;Initial Catalog=SentezLive;Integrated Security=True;Timeout=180;";
-            string connectionString = "Data Source=DESKTOP-1IHL5NT;Initial Catalog=SentezLive;User Id=syncuser;Password=!Sentez1234;Timeout=180;";
+           
+            string connectionString = "Data Source=DESKTOP-1IHL5NT;Initial Catalog=SentezLive;User Id=syncuser;Password=!Sentez1234;Timeout=300;";
 
             //List<(string inventoryCode, string inventoryName, decimal actualStock, decimal price, string attachment)> sentezProducts = new List<(string, string, decimal, decimal, string)>();
 
@@ -39,7 +44,7 @@ namespace ShopifySyncEngine
                 await connection.OpenAsync();
 
                 string sql = @"
-                SELECT Erp_Inventory.InventoryCode as InventoryCode, Erp_Inventory.InventoryName as InventoryName, Erp_InventoryTotal.ActualStock as ActualStock, Erp_InventoryPriceList.Price as Price,Erp_InventoryAttachment.Attachment as Attachment,Erp_Mark.MarkName as MarkName,Erp_InventoryGroup.GroupName as GroupName,Erp_Category.CategoryName2 as CategoryName2 ,Erp_InventoryAttachment.Explanation as Explanation
+                SELECT Erp_Inventory.InventoryCode as InventoryCode, Erp_Inventory.InventoryName as InventoryName, Erp_InventoryTotal.ActualStock as ActualStock, Erp_InventoryPriceList.Price as Price,Erp_InventoryAttachment.Attachment as Attachment,Erp_Mark.MarkName as MarkName,Erp_InventoryGroup.GroupName as GroupName,Erp_Category.CategoryName2 as CategoryName2
                 FROM Erp_Inventory 
                 JOIN Erp_InventoryTotal ON Erp_Inventory.RecId = Erp_InventoryTotal.InventoryID 
 				Join Erp_Category On Erp_Inventory.CategoryId=Erp_Category.RecId
@@ -48,10 +53,18 @@ namespace ShopifySyncEngine
 				Join Erp_Mark on Erp_Inventory.MarkId= Erp_Mark.RecId
 				join Erp_InventoryGroup on Erp_Inventory.GroupId=Erp_InventoryGroup.RecId
                 WHERE Erp_InventoryAttachment.Explanation is not null and Erp_InventoryTotal.TotalDate IS NULL AND Erp_InventoryTotal.ActualStock >= 0 AND Erp_InventoryPriceList.PriceType = 2 AND Erp_InventoryTotal.WarehouseId = 12 ORDER BY Erp_Inventory.RecId;";
+                
 
                 SqlDataAdapter adapter = new SqlDataAdapter(sql, connection);
                 DataTable dt = new DataTable();
-                adapter.Fill(dt);
+                try
+                {
+                    adapter.Fill(dt);
+                }
+                catch (Exception ex)
+                {
+                    log("Error occurred while filling the DataTable: " + ex.Message);
+                }
                 log(dt.Rows.Count);
                 log("Read Shopify");
                 while (lastId >= 0)
@@ -92,7 +105,7 @@ namespace ShopifySyncEngine
                             {
                                 var product = products.Single(q => q.Id == shopifyProduct.ProductId);
                                 product.Title = sentezProduct.Field<string>("MarkName") + " " + sentezProduct.Field<string>("InventoryName") + " " + sentezProduct.Field<string>("CategoryName2");
-                                product.Variants.First().Price = sentezProduct.Field<decimal?>("Price") * 0.75m;
+                                product.Variants.First().Price = sentezProduct.Field<decimal?>("Price") * 0.65m;
                                 product.Variants.First().InventoryQuantity = Convert.ToInt64(sentezProduct.Field<decimal?>("ActualStock"));
                                 product.Options.First().Name = "Brand";
                                 product.Variants.First().Option1 = sentezProduct.Field<string>("MarkName");
@@ -159,7 +172,7 @@ namespace ShopifySyncEngine
                                                                             FulfillmentService = "manual",
                                                                             InventoryManagement = "shopify",
                                                                             Option1 = sentezProduct.Field<string>("MarkName"),
-                                                                            Price = sentezProduct.Field<decimal?>("Price") * 0.75m,
+                                                                            Price = sentezProduct.Field<decimal?>("Price") * 0.65m,
                                                                             SKU = sentezProduct.Field<string>("InventoryCode"),
                                                                             InventoryQuantity = (long)sentezProduct.Field<decimal?>("ActualStock")
                                                                         }
@@ -168,7 +181,7 @@ namespace ShopifySyncEngine
                                 };
                                 await service.CreateAsync(product);
                                 log($"SKU : {sentezProduct.Field<string>("InventoryName")} eklendi. {sentezProduct.Field<decimal?>("Price"):c2}");
-                                await Task.Delay(1000);
+                                await Task.Delay(2000);
                             }
                             catch (Exception ex)
                             {
